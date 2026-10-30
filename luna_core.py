@@ -17,9 +17,16 @@ import pyperclip
 import pywhatkit as kit
 import google.generativeai as genai
 from gtts import gTTS
+from PIL import Image, ImageTk
 
 # --- Gemini API Configuration ---
-GOOGLE_API_KEY = "YOUR_GEMINI_API_KEY"  # හෝ os.getenv("GEMINI_API_KEY")  # මෙතැනට ඔයාගේ API Key එක දාන්න
+import os
+from dotenv import load_dotenv
+
+# .env ෆයිල් එකේ තියෙන variables load කරගැනීම
+load_dotenv()
+
+GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GOOGLE_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-3.8-flash')
 
@@ -31,50 +38,68 @@ TEMP_AUDIO = "temp_voice.wav"
 class LunaRobotApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("LUNA - Sinhala & English AI Assistant")
-        self.root.geometry("520x620")
-        self.root.config(bg="#12121a")
-        self.root.resizable(False, False)
+        self.root.title("LUNA - Your Personal Assistant")
+        
+        # Bildschirmgröße ermitteln
+        self.bg_width = root.winfo_screenwidth()
+        self.bg_height = root.winfo_screenheight()
+        
+        self.root.config(bg="#020205")
 
         self.is_running = True
         self.is_speaking = False
-        self.current_color = "#ff69b4" 
+        self.current_color = "#00ffff" 
 
-        # Title Header
-        self.title_label = tk.Label(root, text="L U N A   A I   ( සිංහල & English )", font=("Courier", 13, "bold"), fg="#00ffff", bg="#12121a")
-        self.title_label.pack(pady=15)
+        # Bild unter Beibehaltung des Seitenverhältnisses laden und zentrieren
+        try:
+            img_path = "luna_face.jpg"
+            if os.path.exists(img_path):
+                pil_img = Image.open(img_path)
+                img_w, img_h = pil_img.size
+                
+                # Seitenverhältnis berechnen, damit nichts verzerrt wird
+                ratio = min(self.bg_width / img_w, self.bg_height / img_h)
+                new_w = int(img_w * ratio)
+                new_h = int(img_h * ratio)
+                
+                pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                
+                # Einen sauberen Hintergrund erstellen und das Bild zentrieren
+                base_img = Image.new("RGB", (self.bg_width, self.bg_height), (2, 2, 5))
+                paste_x = (self.bg_width - new_w) // 2
+                paste_y = (self.bg_height - new_h) // 2
+                base_img.paste(pil_img, (paste_x, paste_y))
+                
+                self.bg_image = ImageTk.PhotoImage(base_img)
+            else:
+                self.bg_image = None
+        except Exception as e:
+            print(f"Image Error: {e}")
+            self.bg_image = None
 
-        # Robot Head Canvas
-        self.canvas_size = 300
-        self.canvas = tk.Canvas(root, width=self.canvas_size, height=self.canvas_size, bg="#08080c", highlightthickness=3, highlightbackground="#00ffff")
-        self.canvas.pack(pady=10)
+        # Hintergrund-Label
+        if self.bg_image:
+            self.bg_label = tk.Label(root, image=self.bg_image)
+            self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        else:
+            self.bg_label = tk.Label(root, bg="#020205", text="[ 'luna_face.jpg' Missing! ]", fg="#ff3333", font=("Courier", 14, "bold"))
+            self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
-        cx, cy = self.canvas_size / 2, self.canvas_size / 2
+        # Titel-Header (Schwebt oben)
+        self.title_label = tk.Label(root, text="L U N A   A I   [ HOLOGRAPHIC CORE ]", font=("Courier", 14, "bold"), fg="#00ffff", bg="#050510", padx=15, pady=6)
+        self.title_label.place(relx=0.5, rely=0.05, anchor=tk.CENTER)
 
-        # Robot Head Rim
-        self.head_rim = self.canvas.create_oval(cx - 130, cy - 130, cx + 130, cy + 130, outline="#333344", width=6)
-        
-        # Inner Screen Display
-        self.screen = self.canvas.create_oval(cx - 115, cy - 115, cx + 115, cy + 115, fill="#000000", outline="#ff69b4", width=3)
+        # Statusanzeige (Schwebt unten)
+        self.status_label = tk.Label(root, text="STATUS: SLEEPING", font=("Courier", 12, "bold"), fg="#ffaa00", bg="#050510", padx=15, pady=8, relief=tk.FLAT)
+        self.status_label.place(relx=0.5, rely=0.82, anchor=tk.CENTER)
 
-        # Glowing Eyes
-        self.eye_left = self.canvas.create_oval(cx - 55, cy - 45, cx - 20, cy + 10, outline="#ff69b4", width=4, fill="#08080c")
-        self.eye_right = self.canvas.create_oval(cx + 20, cy - 45, cx + 55, cy + 10, outline="#ff69b4", width=4, fill="#08080c")
-
-        # Mouth
-        self.mouth = self.canvas.create_arc(cx - 45, cy + 20, cx + 45, cy + 70, start=190, extent=160, style=tk.ARC, outline="#ff69b4", width=4)
-
-        # Status Display Label
-        self.status_label = tk.Label(root, text="STATUS: SLEEPING", font=("Courier", 12, "bold"), fg="#ff69b4", bg="#12121a")
-        self.status_label.pack(pady=10)
-
-        # Log Box
-        self.log_box = tk.Text(root, height=6, width=54, font=("Consolas", 9), bg="#1c1c28", fg="#00ffcc", relief=tk.FLAT)
-        self.log_box.pack(pady=10)
-        self.log_box.insert(tk.END, "[SYSTEM] gTTS Voice Core Initialized.\n[INFO] Ready for Sinhala & English speech...\n")
+        # Log-Box (Unten)
+        self.log_box = tk.Text(root, height=5, width=65, font=("Consolas", 10), bg="#050510", fg="#00ffcc", relief=tk.FLAT)
+        self.log_box.insert(tk.END, "[SYSTEM] Fullscreen Hologram Active.\n[INFO] Ready for voice commands...\n")
         self.log_box.config(state=tk.DISABLED)
+        self.log_box.place(relx=0.5, rely=0.91, anchor=tk.CENTER)
 
-        # Threads
+        # Threads starten
         self.anim_thread = threading.Thread(target=self.robot_animation_loop)
         self.anim_thread.daemon = True
         self.anim_thread.start()
@@ -86,10 +111,6 @@ class LunaRobotApp:
     def update_appearance(self, status_text, color):
         self.status_label.config(text=f"STATUS: {status_text}", fg=color)
         self.current_color = color
-        self.canvas.itemconfig(self.screen, outline=color)
-        self.canvas.itemconfig(self.eye_left, outline=color)
-        self.canvas.itemconfig(self.eye_right, outline=color)
-        self.canvas.itemconfig(self.mouth, outline=color)
 
     def log(self, message):
         self.log_box.config(state=tk.NORMAL)
@@ -98,33 +119,15 @@ class LunaRobotApp:
         self.log_box.config(state=tk.DISABLED)
 
     def robot_animation_loop(self):
-        cx, cy = self.canvas_size / 2, self.canvas_size / 2
-        talk_state = 0
-
         while self.is_running:
             try:
                 if self.is_speaking:
-                    if talk_state == 0:
-                        self.canvas.coords(self.mouth, cx - 40, cy + 15, cx + 40, cy + 65)
-                        self.canvas.itemconfig(self.mouth, extent=180, style=tk.CHORD, fill=self.current_color)
-                        talk_state = 1
-                    else:
-                        self.canvas.coords(self.mouth, cx - 30, cy + 30, cx + 30, cy + 50)
-                        self.canvas.itemconfig(self.mouth, extent=180, style=tk.ARC, fill="")
-                        talk_state = 0
-                    time.sleep(0.12)
+                    self.status_label.config(fg="#ff00ff")
+                    time.sleep(0.15)
+                    self.status_label.config(fg=self.current_color)
+                    time.sleep(0.15)
                 else:
-                    self.canvas.coords(self.mouth, cx - 45, cy + 20, cx + 45, cy + 70)
-                    self.canvas.itemconfig(self.mouth, extent=160, style=tk.ARC, fill="")
-                    
-                    if random.random() < 0.1:  
-                        self.canvas.coords(self.eye_left, cx - 55, cy - 20, cx - 20, cy - 15)
-                        self.canvas.coords(self.eye_right, cx + 20, cy - 20, cx + 55, cy - 15)
-                        time.sleep(0.1)
-                        self.canvas.coords(self.eye_left, cx - 55, cy - 45, cx - 20, cy + 10)
-                        self.canvas.coords(self.eye_right, cx + 20, cy - 45, cx + 55, cy + 10)
-                    
-                    time.sleep(0.3)
+                    time.sleep(0.4)
             except:
                 break
 
@@ -132,17 +135,14 @@ class LunaRobotApp:
         self.log(f"🤖 Luna: {text}")
         self.is_speaking = True
         
-        # Check if text contains Sinhala characters
         has_sinhala = any('\u0d80' <= char <= '\u0dff' for char in text)
         
         try:
             if has_sinhala:
-                # Use Google TTS for Sinhala
                 tts = gTTS(text=text, lang='si')
                 speech_file = "temp_speech.mp3"
                 tts.save(speech_file)
                 
-                # Play using default system startfile (no welcome screens!)
                 os.startfile(speech_file)
                 time.sleep(4)
                 
@@ -152,7 +152,6 @@ class LunaRobotApp:
                     except:
                         pass
             else:
-                # Use pyttsx3 for English (faster)
                 engine = pyttsx3.init()
                 voices = engine.getProperty('voices')
                 for voice in voices:
@@ -203,7 +202,7 @@ class LunaRobotApp:
 
     def run_assistant_loop(self):
         time.sleep(1)
-        self.speak("Hello Vinosha! I am ready. Say Hey Luna to wake me up.")
+        self.speak("Hello Vinosha! My full screen holographic face is online. Say Hey Luna to wake me up.")
         
         while self.is_running:
             self.update_appearance("SLEEPING (Say 'Hey Luna')", "#ffaa00")
@@ -253,9 +252,9 @@ class LunaRobotApp:
                         
                         # --- Notepad Dictation Feature ---
                         if "notepad eke liyanna" in command or "type in notepad" in command or ("notepad" in command and "liyanna" in command):
-                            self.speak("Opening Notepad. I am ready to type what you say. Say stop typing when you are done.")
+                            self.speak("Opening Notepad. I am ready to type what you say.")
                             subprocess.Popen(["notepad.exe"])
-                            time.sleep(1.5)
+                            time.sleep(2)
                             
                             typing_mode = True
                             while typing_mode and self.is_running:
@@ -344,5 +343,7 @@ class LunaRobotApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
+    root.attributes('-fullscreen', True)
+    root.bind("<Escape>", lambda event: root.attributes('-fullscreen', False))
     app = LunaRobotApp(root)
     root.mainloop()
