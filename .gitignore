@@ -3,3 +3,5 @@ __pycache__/
 temp_voice.wav
 temp_speech.mp3
 temp_trigger.wav
+*.lnk
+*.txt
